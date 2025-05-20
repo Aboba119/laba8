@@ -179,10 +179,6 @@ class BankApp:
                                              command=self.create_new_account)
         self.new_account_button.pack(side=tk.LEFT, padx=5)
 
-        self.export_button = ttk.Button(self.buttons_frame, text="Экспорт истории",
-                                        command=self.export_history)
-        self.export_button.pack(side=tk.LEFT, padx=5)
-
     def load_account(self):
         self.account = BankAccount.load_from_file(self.filename)
         if self.account is None:
@@ -301,34 +297,6 @@ class BankApp:
 
         # Отображаем диаграмму в отдельном окне
         fig.show()
-
-    def export_history(self):
-        if not self.account or not self.account.transactions:
-            messagebox.showinfo("Информация", "Нет операций для экспорта")
-            return
-
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            title="Сохранить историю операций"
-        )
-
-        if not file_path:
-            return
-
-        try:
-            with open(file_path, 'w', newline='', encoding='utf-8') as file:
-                writer = csv.writer(file)
-                writer.writerow(['Тип операции', 'Сумма', 'Дата и время'])
-                for transaction in self.account.transactions:
-                    writer.writerow([
-                        'Пополнение' if transaction[0] == 'deposit' else 'Снятие',
-                        f"{transaction[1]:.2f}",
-                        transaction[2].strftime("%Y-%m-%d %H:%M:%S")
-                    ])
-            messagebox.showinfo("Успех", f"История операций успешно экспортирована в файл:\n{file_path}")
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось экспортировать данные:\n{str(e)}")
 
 
 if __name__ == "__main__":
