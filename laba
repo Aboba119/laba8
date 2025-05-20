@@ -1,0 +1,321 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+import csv
+from datetime import datetime
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+
+class BankAccount:
+    def __init__(self, account_number, owner_name, initial_balance=0):
+        self.account_number = account_number
+        self.owner_name = owner_name
+        self.balance = initial_balance
+        self.transactions = []
+
+    def deposit(self, amount):
+        if amount <= 0:
+            return False
+        self.balance += amount
+        self.transactions.append(('deposit', amount, datetime.now()))
+        return True
+
+    def withdraw(self, amount):
+        if amount <= 0:
+            return False
+        if self.balance < amount:
+            return False
+        self.balance -= amount
+        self.transactions.append(('withdraw', amount, datetime.now()))
+        return True
+
+    def get_transactions_by_size(self):
+        small = []
+        medium = []
+        large = []
+
+        for transaction in self.transactions:
+            amount = transaction[1]
+            if amount < 1000:
+                small.append(transaction)
+            elif 1000 <= amount < 10000:
+                medium.append(transaction)
+            else:
+                large.append(transaction)
+
+        return small, medium, large
+
+    def save_to_file(self, filename):
+        try:
+            with open(filename, 'w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow([self.account_number, self.owner_name, self.balance])
+                for transaction in self.transactions:
+                    writer.writerow([transaction[0], transaction[1], transaction[2].isoformat()])
+            return True
+        except Exception as e:
+            print(f"Error saving file: {e}")
+            return False
+
+    @classmethod
+    def load_from_file(cls, filename):
+        try:
+            with open(filename, 'r') as file:
+                reader = csv.reader(file)
+                account_data = next(reader)
+                account = cls(account_data[0], account_data[1], float(account_data[2]))
+
+                for row in reader:
+                    if len(row) >= 3:
+                        transaction_type = row[0]
+                        amount = float(row[1])
+                        date = datetime.fromisoformat(row[2])
+                        account.transactions.append((transaction_type, amount, date))
+                return account
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            print(f"Error loading file: {e}")
+            return None
+
+
+class BankApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Банковский счет")
+        self.root.geometry("460x700")
+
+        self.account = None
+        self.filename = "bank_account.csv"
+
+        self.create_widgets()
+        self.load_account()
+
+    def create_widgets(self):
+        # Основные фреймы
+        self.main_frame = ttk.Frame(self.root, padding="10")
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Информация о счете
+        self.info_frame = ttk.LabelFrame(self.main_frame, text="Информация о счете", padding="10")
+        self.info_frame.grid(row=0, column=0, sticky=tk.W + tk.E, pady=5)
+
+        ttk.Label(self.info_frame, text="Номер счета:").grid(row=0, column=0, sticky=tk.W)
+        self.account_number_label = ttk.Label(self.info_frame, text="")
+        self.account_number_label.grid(row=0, column=1, sticky=tk.W)
+
+        ttk.Label(self.info_frame, text="Владелец:").grid(row=1, column=0, sticky=tk.W)
+        self.owner_label = ttk.Label(self.info_frame, text="")
+        self.owner_label.grid(row=1, column=1, sticky=tk.W)
+
+        ttk.Label(self.info_frame, text="Баланс:").grid(row=2, column=0, sticky=tk.W)
+        self.balance_label = ttk.Label(self.info_frame, text="")
+        self.balance_label.grid(row=2, column=1, sticky=tk.W)
+
+        # Операции
+        self.operation_frame = ttk.LabelFrame(self.main_frame, text="Операции", padding="10")
+        self.operation_frame.grid(row=1, column=0, sticky=tk.W + tk.E, pady=5)
+
+        ttk.Label(self.operation_frame, text="Сумма:").grid(row=0, column=0)
+        self.amount_entry = ttk.Entry(self.operation_frame)
+        self.amount_entry.grid(row=0, column=1, padx=5)
+
+        self.deposit_button = ttk.Button(self.operation_frame, text="Пополнить", command=self.make_deposit)
+        self.deposit_button.grid(row=0, column=2, padx=5)
+
+        self.withdraw_button = ttk.Button(self.operation_frame, text="Снять", command=self.make_withdrawal)
+        self.withdraw_button.grid(row=0, column=3, padx=5)
+
+        # Анализ операций
+        self.analysis_frame = ttk.LabelFrame(self.main_frame, text="Анализ операций", padding="10")
+        self.analysis_frame.grid(row=2, column=0, sticky=tk.W + tk.E, pady=5)
+
+        self.analyze_button = ttk.Button(self.analysis_frame, text="Анализировать операции",
+                                         command=self.analyze_transactions)
+        self.analyze_button.pack(pady=5)
+
+        # График
+        self.chart_frame = ttk.Frame(self.analysis_frame)
+        self.chart_frame.pack(fill=tk.BOTH, expand=True)
+
+        # История операций
+        self.history_frame = ttk.LabelFrame(self.main_frame, text="История операций", padding="10")
+        self.history_frame.grid(row=3, column=0, sticky=tk.W + tk.E + tk.N + tk.S, pady=5)
+
+        self.history_tree = ttk.Treeview(self.history_frame, columns=('type', 'amount', 'date'), show='headings')
+        self.history_tree.heading('type', text='Тип')
+        self.history_tree.heading('amount', text='Сумма')
+        self.history_tree.heading('date', text='Дата')
+        self.history_tree.column('type', width=100)
+        self.history_tree.column('amount', width=100)
+        self.history_tree.column('date', width=200)
+
+        scrollbar = ttk.Scrollbar(self.history_frame, orient=tk.VERTICAL, command=self.history_tree.yview)
+        self.history_tree.configure(yscroll=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.history_tree.pack(fill=tk.BOTH, expand=True)
+
+        # Кнопки управления
+        self.buttons_frame = ttk.Frame(self.main_frame)
+        self.buttons_frame.grid(row=4, column=0, pady=10)
+
+        self.new_account_button = ttk.Button(self.buttons_frame, text="Создать новый счет",
+                                             command=self.create_new_account)
+        self.new_account_button.pack(side=tk.LEFT, padx=5)
+
+        self.export_button = ttk.Button(self.buttons_frame, text="Экспорт истории",
+                                        command=self.export_history)
+        self.export_button.pack(side=tk.LEFT, padx=5)
+
+    def load_account(self):
+        self.account = BankAccount.load_from_file(self.filename)
+        if self.account is None:
+            self.create_new_account()
+        else:
+            self.update_display()
+
+    def create_new_account(self):
+        def save_new_account():
+            account_number = account_number_entry.get()
+            owner_name = owner_name_entry.get()
+            initial_balance = initial_balance_entry.get()
+
+            if not account_number or not owner_name or not initial_balance:
+                messagebox.showerror("Ошибка", "Все поля должны быть заполнены")
+                return
+
+            try:
+                initial_balance = float(initial_balance)
+                if initial_balance < 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Ошибка", "Начальный баланс должен быть положительным числом")
+                return
+
+            self.account = BankAccount(account_number, owner_name, initial_balance)
+            if self.account.save_to_file(self.filename):
+                new_account_window.destroy()
+                self.update_display()
+            else:
+                messagebox.showerror("Ошибка", "Не удалось сохранить новый счет")
+
+        new_account_window = tk.Toplevel(self.root)
+        new_account_window.title("Создать новый счет")
+
+        ttk.Label(new_account_window, text="Номер счета:").grid(row=0, column=0, padx=5, pady=5)
+        account_number_entry = ttk.Entry(new_account_window)
+        account_number_entry.grid(row=0, column=1, padx=5, pady=5)
+
+        ttk.Label(new_account_window, text="Владелец:").grid(row=1, column=0, padx=5, pady=5)
+        owner_name_entry = ttk.Entry(new_account_window)
+        owner_name_entry.grid(row=1, column=1, padx=5, pady=5)
+
+        ttk.Label(new_account_window, text="Начальный баланс:").grid(row=2, column=0, padx=5, pady=5)
+        initial_balance_entry = ttk.Entry(new_account_window)
+        initial_balance_entry.grid(row=2, column=1, padx=5, pady=5)
+
+        ttk.Button(new_account_window, text="Сохранить", command=save_new_account).grid(row=3, column=0, columnspan=2,
+                                                                                        pady=10)
+
+    def update_display(self):
+        if self.account:
+            self.account_number_label.config(text=self.account.account_number)
+            self.owner_label.config(text=self.account.owner_name)
+            self.balance_label.config(text=f"{self.account.balance:.2f} руб.")
+
+            # Обновляем историю операций
+            self.history_tree.delete(*self.history_tree.get_children())
+            for transaction in self.account.transactions:
+                self.history_tree.insert('', tk.END, values=(
+                    'Пополнение' if transaction[0] == 'deposit' else 'Снятие',
+                    f"{transaction[1]:.2f}",
+                    transaction[2].strftime("%Y-%m-%d %H:%M:%S")
+                ))
+
+    def make_deposit(self):
+        amount = self.get_amount_from_entry()
+        if amount is None:
+            return
+
+        if self.account.deposit(amount):
+            self.account.save_to_file(self.filename)
+            self.update_display()
+            messagebox.showinfo("Успех", f"Счет успешно пополнен на {amount:.2f} руб.")
+        else:
+            messagebox.showerror("Ошибка", "Не удалось выполнить операцию")
+
+    def make_withdrawal(self):
+        amount = self.get_amount_from_entry()
+        if amount is None:
+            return
+
+        if self.account.withdraw(amount):
+            self.account.save_to_file(self.filename)
+            self.update_display()
+            messagebox.showinfo("Успех", f"Со счета успешно снято {amount:.2f} руб.")
+        else:
+            messagebox.showerror("Ошибка", "Не удалось выполнить операцию (недостаточно средств или неверная сумма)")
+
+    def get_amount_from_entry(self):
+        try:
+            amount = float(self.amount_entry.get())
+            if amount <= 0:
+                raise ValueError
+            return amount
+        except ValueError:
+            messagebox.showerror("Ошибка", "Введите корректную положительную сумму")
+            return None
+
+    def analyze_transactions(self):
+        if not self.account or not self.account.transactions:
+            messagebox.showinfo("Информация", "Нет операций для анализа")
+            return
+
+        small, medium, large = self.account.get_transactions_by_size()
+        sizes = [len(small), len(medium), len(large)]
+        labels = ['Мелкие (<1000 руб.)', 'Средние (1000-10000 руб.)', 'Крупные (>=10000 руб.)']
+
+        # Создаем круговую диаграмму с помощью plotly
+        fig = go.Figure(data=[go.Pie(labels=labels, values=sizes, hole=.3)])
+        fig.update_layout(
+            title_text="Распределение операций по размерам",
+            margin=dict(t=40, b=0, l=0, r=0),
+            height=300
+        )
+
+        # Отображаем диаграмму в отдельном окне
+        fig.show()
+
+    def export_history(self):
+        if not self.account or not self.account.transactions:
+            messagebox.showinfo("Информация", "Нет операций для экспорта")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Сохранить историю операций"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, 'w', newline='', encoding='utf-8') as file:
+                writer = csv.writer(file)
+                writer.writerow(['Тип операции', 'Сумма', 'Дата и время'])
+                for transaction in self.account.transactions:
+                    writer.writerow([
+                        'Пополнение' if transaction[0] == 'deposit' else 'Снятие',
+                        f"{transaction[1]:.2f}",
+                        transaction[2].strftime("%Y-%m-%d %H:%M:%S")
+                    ])
+            messagebox.showinfo("Успех", f"История операций успешно экспортирована в файл:\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось экспортировать данные:\n{str(e)}")
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = BankApp(root)
+    root.mainloop()
