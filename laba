@@ -1,25 +1,8 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 import csv
 from datetime import datetime
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-
-'''Задание на л.р. №8 ООП 24  
-Требуется написать ООП с графическим интерфейсом в соответствии со своим  
-вариантом.  
-Должны быть реализованы минимум один класс, три атрибута, четыре метода  
-(функции).  
-Ввод данных из файла с контролем правильности ввода.  
-Базы данных не использовать. При необходимости сохранять информацию в  
-файлах, разделяя значения запятыми (CSV файлы) или пробелами. Для GUI  
-использовать библиотеку tkinter (mathplotlib не использовать).  
-Объекты – действия с банковским счетом  
-Функции:  
--пополнение счета  
--снятие со счета  
--сегментация полного списка операций по типам (мелкие, средние, крупные)  
--визуализация предыдущей функции в форме круговой диаграммы'''
+import math
 
 
 class BankAccount:
@@ -99,7 +82,7 @@ class BankApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Банковский счет")
-        self.root.geometry("460x700")
+        self.root.geometry("900x700")
 
         self.account = None
         self.filename = "bank_account.csv"
@@ -112,9 +95,17 @@ class BankApp:
         self.main_frame = ttk.Frame(self.root, padding="10")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Информация о счете
-        self.info_frame = ttk.LabelFrame(self.main_frame, text="Информация о счете", padding="10")
-        self.info_frame.grid(row=0, column=0, sticky=tk.W + tk.E, pady=5)
+        # Левый фрейм для информации и операций
+        self.left_frame = ttk.Frame(self.main_frame)
+        self.left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Правый фрейм для диаграммы
+        self.right_frame = ttk.Frame(self.main_frame, width=300)
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Информация о счете (левый фрейм)
+        self.info_frame = ttk.LabelFrame(self.left_frame, text="Информация о счете", padding="10")
+        self.info_frame.pack(fill=tk.X, pady=5)
 
         ttk.Label(self.info_frame, text="Номер счета:").grid(row=0, column=0, sticky=tk.W)
         self.account_number_label = ttk.Label(self.info_frame, text="")
@@ -128,9 +119,9 @@ class BankApp:
         self.balance_label = ttk.Label(self.info_frame, text="")
         self.balance_label.grid(row=2, column=1, sticky=tk.W)
 
-        # Операции
-        self.operation_frame = ttk.LabelFrame(self.main_frame, text="Операции", padding="10")
-        self.operation_frame.grid(row=1, column=0, sticky=tk.W + tk.E, pady=5)
+        # Операции (левый фрейм)
+        self.operation_frame = ttk.LabelFrame(self.left_frame, text="Операции", padding="10")
+        self.operation_frame.pack(fill=tk.X, pady=5)
 
         ttk.Label(self.operation_frame, text="Сумма:").grid(row=0, column=0)
         self.amount_entry = ttk.Entry(self.operation_frame)
@@ -142,21 +133,17 @@ class BankApp:
         self.withdraw_button = ttk.Button(self.operation_frame, text="Снять", command=self.make_withdrawal)
         self.withdraw_button.grid(row=0, column=3, padx=5)
 
-        # Анализ операций
-        self.analysis_frame = ttk.LabelFrame(self.main_frame, text="Анализ операций", padding="10")
-        self.analysis_frame.grid(row=2, column=0, sticky=tk.W + tk.E, pady=5)
+        # Анализ операций (левый фрейм)
+        self.analysis_frame = ttk.LabelFrame(self.left_frame, text="Анализ операций", padding="10")
+        self.analysis_frame.pack(fill=tk.X, pady=5)
 
         self.analyze_button = ttk.Button(self.analysis_frame, text="Анализировать операции",
                                          command=self.analyze_transactions)
         self.analyze_button.pack(pady=5)
 
-        # График
-        self.chart_frame = ttk.Frame(self.analysis_frame)
-        self.chart_frame.pack(fill=tk.BOTH, expand=True)
-
-        # История операций
-        self.history_frame = ttk.LabelFrame(self.main_frame, text="История операций", padding="10")
-        self.history_frame.grid(row=3, column=0, sticky=tk.W + tk.E + tk.N + tk.S, pady=5)
+        # История операций (левый фрейм)
+        self.history_frame = ttk.LabelFrame(self.left_frame, text="История операций", padding="10")
+        self.history_frame.pack(fill=tk.BOTH, expand=True)
 
         self.history_tree = ttk.Treeview(self.history_frame, columns=('type', 'amount', 'date'), show='headings')
         self.history_tree.heading('type', text='Тип')
@@ -171,13 +158,23 @@ class BankApp:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.history_tree.pack(fill=tk.BOTH, expand=True)
 
-        # Кнопки управления
-        self.buttons_frame = ttk.Frame(self.main_frame)
-        self.buttons_frame.grid(row=4, column=0, pady=10)
+        # Кнопки управления (левый фрейм)
+        self.buttons_frame = ttk.Frame(self.left_frame)
+        self.buttons_frame.pack(fill=tk.X, pady=10)
 
         self.new_account_button = ttk.Button(self.buttons_frame, text="Создать новый счет",
                                              command=self.create_new_account)
         self.new_account_button.pack(side=tk.LEFT, padx=5)
+
+        # Фрейм для диаграммы (правый фрейм)
+        self.chart_frame = ttk.LabelFrame(self.right_frame, text="Круговая диаграмма операций", padding="10")
+        self.chart_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        self.canvas = tk.Canvas(self.chart_frame, width=300, height=300, bg='white')
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+
+        self.legend_frame = ttk.Frame(self.chart_frame)
+        self.legend_frame.pack(fill=tk.X, pady=5)
 
     def load_account(self):
         self.account = BankAccount.load_from_file(self.filename)
@@ -286,17 +283,61 @@ class BankApp:
         small, medium, large = self.account.get_transactions_by_size()
         sizes = [len(small), len(medium), len(large)]
         labels = ['Мелкие (<1000 руб.)', 'Средние (1000-10000 руб.)', 'Крупные (>=10000 руб.)']
+        colors = ['#FF9999', '#66B2FF', '#99FF99']
 
-        # Создаем круговую диаграмму с помощью plotly
-        fig = go.Figure(data=[go.Pie(labels=labels, values=sizes, hole=.3)])
-        fig.update_layout(
-            title_text="Распределение операций по размерам",
-            margin=dict(t=40, b=0, l=0, r=0),
-            height=300
-        )
+        # Очищаем предыдущую диаграмму и легенду
+        self.canvas.delete("all")
+        for widget in self.legend_frame.winfo_children():
+            widget.destroy()
 
-        # Отображаем диаграмму в отдельном окне
-        fig.show()
+        # Если есть только одна категория операций
+        active_categories = sum(1 for size in sizes if size > 0)
+        if active_categories == 1:
+            # Находим индекс категории, которая имеет операции
+            active_index = next(i for i, size in enumerate(sizes) if size > 0)
+            self.canvas.create_oval(
+                30, 30, 270, 270,
+                fill=colors[active_index], outline='black'
+            )
+            # Добавляем легенду
+            ttk.Label(self.legend_frame,
+                      text=f"{labels[active_index]}: {sizes[active_index]} (100%)",
+                      foreground='black',
+                      background=colors[active_index],
+                      padding=2).pack(anchor=tk.W, fill=tk.X)
+        else:
+            total = sum(sizes)
+            if total == 0:
+                return
+
+            start_angle = 0
+            center_x, center_y = 150, 150
+            radius = 120
+
+            for i, (size, color) in enumerate(zip(sizes, colors)):
+                if size == 0:
+                    continue
+
+                extent = 360 * (size / total)
+                self.canvas.create_arc(
+                    center_x - radius, center_y - radius,
+                    center_x + radius, center_y + radius,
+                    start=start_angle, extent=extent,
+                    fill=color, outline='black'
+                )
+
+                ttk.Label(self.legend_frame,
+                          text=f"{labels[i]}: {size} ({size / total:.1%})",
+                          foreground='black',
+                          background=color,
+                          padding=2).pack(anchor=tk.W, fill=tk.X)
+
+                start_angle += extent
+
+        # Добавляем заголовок
+        self.canvas.create_text(150, 20,
+                                text="Распределение операций",
+                                font=('Arial', 10, 'bold'))
 
 
 if __name__ == "__main__":
